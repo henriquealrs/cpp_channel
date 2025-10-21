@@ -16,5 +16,6 @@ set(THREADS_PREFER_PTHREAD_FLAG TRUE)
 find_package(Threads REQUIRED)
 
 target_link_libraries(test_channel_1 PRIVATE Threads::Threads)
+target_compile_options(test_channel_1 PRIVATE -g -O0)
 
 add_test(NAME test_channel_1 COMMAND test_channel_1)
