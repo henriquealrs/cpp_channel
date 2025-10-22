@@ -1,14 +1,11 @@
 #include <atomic>
-#include <cassert>
 #include <channel/channel.hpp>
 #include <chrono>
-#include <iostream>
+#include <gtest/gtest.h>
 #include <thread>
 #include <vector>
 
-namespace {
-
-bool basic_round_trip() {
+TEST(ChannelTest, BasicRoundTrip) {
     Channel<int, 2> channel;
 
     int in = 42;
@@ -16,10 +13,10 @@ bool basic_round_trip() {
 
     int out = 0;
     channel.receive(out);
-    return out == 42;
+    EXPECT_EQ(out, 42);
 }
 
-bool move_semantics() {
+TEST(ChannelTest, MoveSemantics) {
     Channel<std::vector<int>, 1> channel;
 
     std::vector<int> payload{1, 2, 3};
@@ -28,10 +25,12 @@ bool move_semantics() {
     std::vector<int> received;
     channel >> received;
 
-    return received.size() == 3 && received[0] == 1 && payload.empty();
+    EXPECT_EQ(received.size(), 3);
+    EXPECT_EQ(received[0], 1);
+    EXPECT_TRUE(payload.empty());
 }
 
-bool blocking_behavior() {
+TEST(ChannelTest, BlockingBehavior) {
     Channel<int, 1> channel;
     std::atomic<bool> second_send_started{false};
     std::atomic<bool> second_send_completed{false};
@@ -64,10 +63,13 @@ bool blocking_behavior() {
     producer.join();
     consumer.join();
 
-    return waiting && observed_first == 1 && second_value.load() == 2;
+    EXPECT_TRUE(waiting);
+    EXPECT_EQ(observed_first, 1);
+    EXPECT_EQ(second_value.load(), 2);
 }
 
-bool consistency(const int n = 200) {
+TEST(ChannelTest, Consistency) {
+    constexpr int n = 200;
     Channel<int, 3> ch;
     auto producer_work = [&ch](int b, int e) {
         for (int i = b; i < e; i++) {
@@ -108,19 +110,8 @@ bool consistency(const int n = 200) {
     consumer2.join();
     consumer3.join();
 
-    bool res = (cnt.load() == n);
+    EXPECT_EQ(cnt.load(), n);
     for (int i = 0; i < n; i++) {
-        res &= (nums[i] == i);
+        EXPECT_EQ(nums[i], i);
     }
-    return res;
-}
-
-}  // namespace
-
-int main() {
-    assert(basic_round_trip());
-    assert(move_semantics());
-    assert(blocking_behavior());
-    assert(consistency());
-    return 0;
 }
