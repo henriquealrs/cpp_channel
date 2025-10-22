@@ -68,36 +68,47 @@ bool blocking_behavior() {
 }
 
 bool consistency(const int n = 200) {
-    std::atomic<int> cnt;
     Channel<int, 3> ch;
     auto producer_work = [&ch](int b, int e) {
         for (int i = b; i < e; i++) {
-            std::cout << "sending " << i << "\n";
             ch.send(i);
         }
     };
 
-    std::thread producer1(producer_work, 0, n);  // , n / 2);
-    // std::thread producer2(producer_work, n / 2, n);
+    std::thread producer1(producer_work, 0, n / 2);
+    std::thread producer2(producer_work, n / 2, n);
 
-    std::vector<int> nums(n);
-    auto consumer_work = [&nums, &ch]() {
-        int i = 0;
-        ch.receive(i);
-        std::cout << "Received " << i << "\n";
-        nums[i] = i;
+    std::vector<int> nums(n, -1);
+    std::atomic<int> cnt{0};
+    auto consumer_work = [&nums, &ch, &cnt]() {
+        while (true) {
+            int value = -1;
+            ch.receive(value);
+            if (value < 0) {
+                break;
+            }
+            nums[value] = value;
+            cnt.fetch_add(1);
+        }
     };
 
     std::thread consumer1(consumer_work);
-    // std::thread consumer2(consumer_work);
+    std::thread consumer2(consumer_work);
+    std::thread consumer3(consumer_work);
 
     producer1.join();
-    // producer2.join();
-    consumer1.join();
-    // consumer2.join();
-    // consumer3.join();
+    producer2.join();
 
-    bool res = true;
+    for (int i = 0; i < 3; ++i) {
+        int sentinel = -1;
+        ch.send(sentinel);
+    }
+
+    consumer1.join();
+    consumer2.join();
+    consumer3.join();
+
+    bool res = (cnt.load() == n);
     for (int i = 0; i < n; i++) {
         res &= (nums[i] == i);
     }
