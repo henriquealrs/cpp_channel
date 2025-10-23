@@ -56,7 +56,7 @@ class Channel {
             send_pos_.store((pos + 1) % N);
             spaces_available_.fetch_sub(1);
         }
-        receive_cv_.notify_one();
+        receive_cv_.notify_all();
     }
 
     void send(T&& data) {
@@ -73,7 +73,7 @@ class Channel {
             send_pos_.store((pos + 1) % N);
             spaces_available_.fetch_sub(1);
         }
-        receive_cv_.notify_one();
+        receive_cv_.notify_all();
     }
 
     void send(const T& data) {
@@ -88,7 +88,7 @@ class Channel {
             send_pos_.store((pos + 1) % N);
             spaces_available_.fetch_sub(1);
         }
-        receive_cv_.notify_one();
+        receive_cv_.notify_all();
     }
 
     std::optional<T> receive() {
@@ -110,7 +110,7 @@ class Channel {
             receive_pos_.store((pos + 1) % N);
             spaces_available_.fetch_add(1);
         }
-        send_cv_.notify_one();
+        send_cv_.notify_all();
         return ret;
     }
 
@@ -119,8 +119,8 @@ class Channel {
             std::lock_guard lk(data_mutex_);
             this->closed_.store(true);
         }
-        receive_cv_.notify_one();
-        send_cv_.notify_one();
+        receive_cv_.notify_all();
+        send_cv_.notify_all();
     }
 
     inline bool is_closed() const noexcept { return closed_.load(); }
