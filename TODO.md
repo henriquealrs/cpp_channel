@@ -1,7 +1,6 @@
 # TODO
 
 ## Library Improvements
-- Implement channel closing semantics so producers can signal completion without sentinels.
 - Add non-blocking `trySend` / `tryReceive` APIs for polling scenarios.
 - Provide timed send/receive operations to support cancellation and timeouts.
 - Evaluate fairness and performance; consider replacing atomics with scoped counters guarded by mutex to prevent priority inversion.

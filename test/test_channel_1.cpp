@@ -159,7 +159,6 @@ TEST(ChannelTest, ConsistencyWithClose) {
     producer2.join();
 
     ch.close();
-    std::cout << "Channel closed\n";
 
     consumer1.join();
     consumer2.join();
