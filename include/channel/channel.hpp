@@ -1,10 +1,13 @@
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <condition_variable>
 #include <exception>
+#include <functional>
 #include <iostream>
 #include <mutex>
 #include <optional>
+#include <random>
 #include <stdexcept>
 #include <utility>
 
@@ -14,6 +17,8 @@ class Channel {
     Channel() = default;
     Channel(const Channel& other) = delete;
     Channel& operator=(const Channel& other) = delete;
+    enum class SendResult { Success, Full, Closed };
+    enum class RecvResult { Success, Empty, Closed };
 
    private:
     std::atomic<int> spaces_available_{N};
@@ -123,6 +128,48 @@ class Channel {
         send_cv_.notify_all();
     }
 
+    SendResult try_send(const T& data) {
+        std::unique_lock lk(data_mutex_, std::try_to_lock);
+        if (!lk.owns_lock()) {
+            return SendResult::Full;
+        }
+        if (is_closed()) {
+            return SendResult::Closed;
+        }
+        if (is_full()) {
+            return SendResult::Full;
+        }
+        const auto pos = send_pos_.load();
+        buffer_[pos] = data;
+        send_pos_.store((pos + 1) % N);
+        spaces_available_.fetch_sub(1);
+
+        lk.unlock();
+        receive_cv_.notify_all();
+        return SendResult::Success;
+    }
+
+    std::pair<RecvResult, std::optional<T>> try_receive() {
+        std::unique_lock lk(data_mutex_, std::try_to_lock);
+        if (!lk.owns_lock()) {
+            return make_pair(RecvResult::Empty, std::optional<T>{});
+        }
+        if (is_closed()) {
+            return make_pair(RecvResult::Closed, std::optional<T>{});
+        }
+        if (is_emtpy()) {
+            return make_pair(RecvResult::Empty, std::optional<T>{});
+        }
+        const auto pos = receive_pos_.load();
+        std::optional<T> result = std::move(buffer_[pos]);
+        receive_pos_.store((pos + 1) % N);
+        spaces_available_.fetch_add(1);
+
+        lk.unlock();
+        send_cv_.notify_all();
+        return std::make_pair(RecvResult::Success, result);
+    }
+
     inline bool is_closed() const noexcept { return closed_.load(); }
 
     void operator<<(const T& data) { send(data); }
@@ -133,4 +180,15 @@ class Channel {
 template <typename T, int N>
 void operator>>(Channel<T, N>& ch, T& data) {
     ch.receive(data);
+}
+
+template <class... Ops>
+int select_nb(Ops&&... ops) {
+    std::array<std::function<bool()>, sizeof...(Ops)> v{
+        std::forward<Ops>(ops)...};
+    thread_local std::mt19937 rng{std::random_device{}()};
+    std::shuffle(v.begin(), v.end(), rng);
+    for (size_t i = 0; i < v.size(); ++i)
+        if (v[i]()) return static_cast<int>(i);
+    return -1;  // default
 }

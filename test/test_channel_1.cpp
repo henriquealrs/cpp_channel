@@ -10,6 +10,8 @@
 #include <thread>
 #include <vector>
 
+using ChannelInt1 = Channel<int, 1>;
+
 TEST(ChannelTest, BasicRoundTrip) {
     Channel<int, 2> channel;
 
@@ -168,6 +170,102 @@ TEST(ChannelTest, ConsistencyWithClose) {
     for (int i = 0; i < n; i++) {
         EXPECT_EQ(nums[i], i);
     }
+}
+
+TEST(ChannelTest, TrySendNonBlockingSemantics) {
+    ChannelInt1 ch;
+
+    auto first = ch.try_send(42);
+    EXPECT_EQ(first, ChannelInt1::SendResult::Success);
+
+    auto second = ch.try_send(43);
+    EXPECT_EQ(second, ChannelInt1::SendResult::Full);
+
+    auto received = ch.receive();
+    ASSERT_TRUE(received.has_value());
+    EXPECT_EQ(received.value(), 42);
+
+    auto third = ch.try_send(99);
+    EXPECT_EQ(third, ChannelInt1::SendResult::Success);
+
+    auto received_again = ch.receive();
+    ASSERT_TRUE(received_again.has_value());
+    EXPECT_EQ(received_again.value(), 99);
+
+    ch.close();
+
+    auto fourth = ch.try_send(100);
+    EXPECT_EQ(fourth, ChannelInt1::SendResult::Closed);
+
+    auto [result, try_recv_after_close] = ch.try_receive();
+    EXPECT_EQ(result, ChannelInt1::RecvResult::Closed);
+    EXPECT_FALSE(try_recv_after_close.has_value());
+}
+
+TEST(ChannelTest, TryReceiveReturnsEmptyWhenChannelEmpty) {
+    ChannelInt1 ch;
+
+    auto [result, maybeValue] = ch.try_receive();
+    EXPECT_EQ(result, ChannelInt1::RecvResult::Empty);
+    EXPECT_FALSE(maybeValue.has_value());
+}
+
+TEST(ChannelTest, TryReceiveReturnsSuccessWhenValueAvailable) {
+    ChannelInt1 ch;
+
+    int expected = 77;
+    ch.send(expected);
+
+    auto [result, maybeValue] = ch.try_receive();
+    EXPECT_EQ(result, ChannelInt1::RecvResult::Success);
+    ASSERT_TRUE(maybeValue.has_value());
+    EXPECT_EQ(maybeValue.value(), expected);
+
+    auto [afterResult, afterValue] = ch.try_receive();
+    EXPECT_EQ(afterResult, ChannelInt1::RecvResult::Empty);
+    EXPECT_FALSE(afterValue.has_value());
+}
+
+TEST(SelectNbTest, ReturnsMinusOneWhenNoOperationReady) {
+    ChannelInt1 ch;
+
+    int index = select_nb([&]() {
+        auto [result, value] = ch.try_receive();
+        EXPECT_FALSE(value.has_value());
+        return result == ChannelInt1::RecvResult::Success;
+    });
+
+    EXPECT_EQ(index, -1);
+}
+
+TEST(SelectNbTest, PicksReadyReceiveOperation) {
+    ChannelInt1 ch;
+    int expected = 123;
+    ch.send(expected);
+
+    bool receiveAttempted = false;
+    std::optional<int> observed;
+
+    int index = select_nb(
+        [&]() {
+            receiveAttempted = true;
+            auto [result, maybeValue] = ch.try_receive();
+            if (result == ChannelInt1::RecvResult::Success) {
+                observed = maybeValue;
+                return true;
+            }
+            return false;
+        },
+        [&]() { return false; });
+
+    EXPECT_TRUE(receiveAttempted);
+    EXPECT_NE(index, -1);
+    ASSERT_TRUE(observed.has_value());
+    EXPECT_EQ(observed.value(), expected);
+
+    auto [postResult, postValue] = ch.try_receive();
+    EXPECT_EQ(postResult, ChannelInt1::RecvResult::Empty);
+    EXPECT_FALSE(postValue.has_value());
 }
 
 TEST(ChannelTest, HighVolumeMultiProducerMultiConsumer) {
@@ -369,7 +467,7 @@ TEST(ChannelCloseTest, ReceiversDrainThenExit) {
 }
 
 TEST(ChannelCloseTest, CloseIsIdempotent) {
-    Channel<int, 1> ch;
+    ChannelInt1 ch;
     ch.close();
     EXPECT_NO_THROW(ch.close());
 
@@ -378,7 +476,7 @@ TEST(ChannelCloseTest, CloseIsIdempotent) {
 }
 
 TEST(ChannelCloseTest, SendAfterCloseThrows) {
-    Channel<int, 1> ch;
+    ChannelInt1 ch;
     ch.close();
     int payload = 7;
     EXPECT_THROW(ch.send(payload), std::runtime_error);

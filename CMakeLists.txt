@@ -25,6 +25,12 @@ set(THREADS_PREFER_PTHREAD_FLAG TRUE)
 find_package(Threads REQUIRED)
 
 target_link_libraries(test_channel_1 PRIVATE Threads::Threads GTest::gtest_main)
-target_compile_options(test_channel_1 PRIVATE -g -O0)
+target_compile_options(test_channel_1 PRIVATE -g -O3)
 
 add_test(NAME test_channel_1 COMMAND test_channel_1)
+
+add_executable(bench_channel
+               ${CMAKE_CURRENT_SOURCE_DIR}/bench/channel_benchmark.cpp)
+target_include_directories(bench_channel PRIVATE
+                           ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_link_libraries(bench_channel PRIVATE Threads::Threads)
