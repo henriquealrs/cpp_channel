@@ -48,7 +48,7 @@ TEST(ChannelTest, BlockingBehavior) {
     int first = 1;
     channel.send(first);  // fills the buffer
 
-    std::thread producer([&]() {
+    std::jthread producer([&]() {
         int value = 2;
         second_send_started.store(true);
         channel.send(value);  // should block until a receive happens
@@ -64,7 +64,7 @@ TEST(ChannelTest, BlockingBehavior) {
     ASSERT_TRUE(first_result.has_value());
     int observed_first = first_result.value();
 
-    std::thread consumer([&]() {
+    std::jthread consumer([&]() {
         auto second_result = channel.receive();
         if (second_result.has_value()) {
             second_value.store(second_result.value());
@@ -88,8 +88,8 @@ TEST(ChannelTest, Consistency) {
         }
     };
 
-    std::thread producer1(producer_work, 0, n / 2);
-    std::thread producer2(producer_work, n / 2, n);
+    std::jthread producer1(producer_work, 0, n / 2);
+    std::jthread producer2(producer_work, n / 2, n);
 
     std::vector<int> nums(n, -1);
     std::atomic<int> cnt{0};
@@ -106,9 +106,9 @@ TEST(ChannelTest, Consistency) {
         }
     };
 
-    std::thread consumer1(consumer_work);
-    std::thread consumer2(consumer_work);
-    std::thread consumer3(consumer_work);
+    std::jthread consumer1(consumer_work);
+    std::jthread consumer2(consumer_work);
+    std::jthread consumer3(consumer_work);
 
     producer1.join();
     producer2.join();
@@ -137,8 +137,8 @@ TEST(ChannelTest, ConsistencyWithClose) {
         }
     };
 
-    std::thread producer1(producer_work, 0, n / 2);
-    std::thread producer2(producer_work, n / 2, n);
+    std::jthread producer1(producer_work, 0, n / 2);
+    std::jthread producer2(producer_work, n / 2, n);
 
     std::vector<int> nums(n, -1);
     std::atomic<int> cnt{0};
@@ -153,9 +153,9 @@ TEST(ChannelTest, ConsistencyWithClose) {
         }
     };
 
-    std::thread consumer1(consumer_work);
-    std::thread consumer2(consumer_work);
-    std::thread consumer3(consumer_work);
+    std::jthread consumer1(consumer_work);
+    std::jthread consumer2(consumer_work);
+    std::jthread consumer3(consumer_work);
 
     producer1.join();
     producer2.join();
@@ -281,7 +281,7 @@ TEST(ChannelTest, HighVolumeMultiProducerMultiConsumer) {
         }
     };
 
-    std::vector<std::thread> producer_threads;
+    std::vector<std::jthread> producer_threads;
     for (int p = 0; p < producers; ++p) {
         producer_threads.emplace_back(producer_work, p * per_producer);
     }
@@ -306,7 +306,7 @@ TEST(ChannelTest, HighVolumeMultiProducerMultiConsumer) {
         }
     };
 
-    std::vector<std::thread> consumer_threads;
+    std::vector<std::jthread> consumer_threads;
     for (int c = 0; c < consumers; ++c) {
         consumer_threads.emplace_back(consumer_work);
     }
@@ -347,7 +347,7 @@ TEST(ChannelTest, ProducerSequenceIntegrity) {
         }
     };
 
-    std::vector<std::thread> producers;
+    std::vector<std::jthread> producers;
     for (int i = 0; i < n_producers; ++i) {
         producers.emplace_back(producer_work, i);
     }
@@ -369,7 +369,7 @@ TEST(ChannelTest, ProducerSequenceIntegrity) {
     };
 
     constexpr int n_consumers = 5;
-    std::vector<std::thread> consumers;
+    std::vector<std::jthread> consumers;
     for (int i = 0; i < n_consumers; ++i) {
         consumers.emplace_back(consumer_work);
     }
@@ -404,7 +404,7 @@ TEST(ChannelTest, ThroughputExpectation) {
 
     auto start = std::chrono::steady_clock::now();
 
-    std::thread producer([&]() {
+    std::jthread producer([&]() {
         for (int i = 0; i < iterations; ++i) {
             ch.send(i);
         }
@@ -415,7 +415,7 @@ TEST(ChannelTest, ThroughputExpectation) {
     std::vector<int> received_values;
     received_values.reserve(iterations);
 
-    std::thread consumer([&]() {
+    std::jthread consumer([&]() {
         while (true) {
             auto maybeValue = ch.receive();
             ASSERT_TRUE(maybeValue.has_value());
@@ -440,7 +440,7 @@ TEST(ChannelTest, ThroughputExpectation) {
 
 TEST(ChannelCloseTest, ReceiversDrainThenExit) {
     Channel<int, 2> ch;
-    std::thread producer([&]() {
+    std::jthread producer([&]() {
         for (int i = 0; i < 10; ++i) {
             ch.send(i);
         }
@@ -448,7 +448,7 @@ TEST(ChannelCloseTest, ReceiversDrainThenExit) {
     });
 
     std::vector<int> received;
-    std::thread consumer([&]() {
+    std::jthread consumer([&]() {
         while (true) {
             auto value = ch.receive();
             if (!value.has_value()) {

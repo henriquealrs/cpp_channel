@@ -43,7 +43,7 @@ BenchmarkResult runScenario(std::string label, std::size_t messages,
 
   auto start = std::chrono::steady_clock::now();
 
-  std::vector<std::thread> consumerThreads;
+  std::vector<std::jthread> consumerThreads;
   consumerThreads.reserve(consumers);
   for (int i = 0; i < consumers; ++i) {
     consumerThreads.emplace_back([&]() {
@@ -66,7 +66,7 @@ BenchmarkResult runScenario(std::string label, std::size_t messages,
     }
   };
 
-  std::vector<std::thread> producerThreads;
+  std::vector<std::jthread> producerThreads;
   producerThreads.reserve(producers);
   for (int i = 0; i < producers; ++i) {
     producerThreads.emplace_back(producerWork, i);

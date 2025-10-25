@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <concepts>
 #include <condition_variable>
 #include <exception>
 #include <functional>
@@ -8,10 +9,12 @@
 #include <mutex>
 #include <optional>
 #include <random>
+#include <ranges>
 #include <stdexcept>
 #include <utility>
 
 template <typename T, int N = 1>
+requires(N > 0)
 class Channel {
    public:
     Channel() = default;
@@ -96,7 +99,7 @@ class Channel {
         receive_cv_.notify_all();
     }
 
-    std::optional<T> receive() {
+    [[nodiscard]] std::optional<T> receive() {
         std::optional<T> ret;
         {
             std::unique_lock<std::mutex> lk(data_mutex_);
@@ -149,16 +152,16 @@ class Channel {
         return SendResult::Success;
     }
 
-    std::pair<RecvResult, std::optional<T>> try_receive() {
+    [[nodiscard]] std::pair<RecvResult, std::optional<T>> try_receive() {
         std::unique_lock lk(data_mutex_, std::try_to_lock);
         if (!lk.owns_lock()) {
-            return make_pair(RecvResult::Empty, std::optional<T>{});
+            return std::make_pair(RecvResult::Empty, std::optional<T>{});
         }
         if (is_closed()) {
-            return make_pair(RecvResult::Closed, std::optional<T>{});
+            return std::make_pair(RecvResult::Closed, std::optional<T>{});
         }
         if (is_emtpy()) {
-            return make_pair(RecvResult::Empty, std::optional<T>{});
+            return std::make_pair(RecvResult::Empty, std::optional<T>{});
         }
         const auto pos = receive_pos_.load();
         std::optional<T> result = std::move(buffer_[pos]);
@@ -178,8 +181,11 @@ class Channel {
 };
 
 template <typename T, int N>
+requires(N > 0)
 void operator>>(Channel<T, N>& ch, T& data) {
-    ch.receive(data);
+    if (auto value = ch.receive()) {
+        data = std::move(value.value());
+    }
 }
 
 template <class... Ops>
@@ -187,8 +193,9 @@ int select_nb(Ops&&... ops) {
     std::array<std::function<bool()>, sizeof...(Ops)> v{
         std::forward<Ops>(ops)...};
     thread_local std::mt19937 rng{std::random_device{}()};
-    std::shuffle(v.begin(), v.end(), rng);
-    for (size_t i = 0; i < v.size(); ++i)
+    std::ranges::shuffle(v, rng);
+    for (size_t i = 0; i < v.size(); ++i) {
         if (v[i]()) return static_cast<int>(i);
+    }
     return -1;  // default
 }
