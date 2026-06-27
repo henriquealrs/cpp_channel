@@ -14,7 +14,7 @@
 #include <utility>
 
 template <typename T, int N = 1>
-requires(N > 0)
+    requires(N > 0)
 class Channel {
    public:
     Channel() = default;
@@ -33,14 +33,14 @@ class Channel {
     std::condition_variable send_cv_;
     std::condition_variable receive_cv_;
 
-    inline bool is_emtpy() const noexcept {
+    [[nodiscard]] inline bool is_emtpy() const noexcept {
         return spaces_available_.load() == N;
     }
-    inline bool is_full() const noexcept {
+    [[nodiscard]] inline bool is_full() const noexcept {
         return spaces_available_.load() == 0;
     }
 
-    inline bool can_terminate() const noexcept {
+    [[nodiscard]] inline bool can_terminate() const noexcept {
         return is_closed() && is_emtpy();
     }
 
@@ -181,7 +181,7 @@ class Channel {
 };
 
 template <typename T, int N>
-requires(N > 0)
+    requires(N > 0)
 void operator>>(Channel<T, N>& ch, T& data) {
     if (auto value = ch.receive()) {
         data = std::move(value.value());
